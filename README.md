@@ -1,4 +1,4 @@
-GenAI Sports Tournament Calendar
+## GenAI Sports Tournament Calendar
 A comprehensive GenAI-powered solution to generate up-to-date sports tournament calendars across 12 sports with multiple competition levels.
  Features
 •	GenAI-Powered: Uses AI to extract tournament data from multiple sources
@@ -9,7 +9,7 @@ A comprehensive GenAI-powered solution to generate up-to-date sports tournament 
 •	REST API: Complete API for data access
 •	Web UI: Interactive tournament browser
 •	Local Tournaments: Includes regional and local competitions
- Project Structure
+## Project Structure
 tournament-calendar/
 ├── src/
 │   ├── database.py           
@@ -30,7 +30,7 @@ tournament-calendar/
 Prerequisites
 •	Python 3.8+
 •	pip (Python package manager)
-Installation
+## Installation
 1.	Clone/Download the project
 # If using git
 git clone <repository-url>
@@ -51,7 +51,7 @@ python api.py
 6.	Access the application
 •	Web UI: http://localhost:5000
 •	API: http://localhost:5000/api/tournaments
- Requirements.txt
+##  Requirements.txt
 Flask==2.3.3
 requests==2.31.0
 beautifulsoup4==4.12.2
@@ -59,7 +59,7 @@ pandas==2.1.1
 sqlite3-to-pandas==0.1.0
 numpy==1.24.3
 lxml==4.9.3
- Database Schema
+## Database Schema
 CREATE TABLE tournaments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -74,11 +74,11 @@ CREATE TABLE tournaments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
- Sample Output
-CSV Format
+## Sample Output
+# CSV Format
 id,name,sport,level,start_date,end_date,official_url,streaming_links,image_url,summary
 1,ICC Cricket World Cup,cricket,international,2024-10-15,2024-11-20,https://icc-cricket.com,Star Sports,https://source.unsplash.com/400x300/?cricket,The biggest cricket tournament in the world
-JSON Format
+# JSON Format
 [
   {
     "id": 1,
