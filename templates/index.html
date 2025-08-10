@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tournament Calendar</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Inline critical CSS to prevent FOUC */
+        body { 
+            margin: 0; 
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏆 Tournament Calendar</h1>
+            <p>Your AI-powered sports tournament tracker</p>
+        </header>
+
+        <div class="controls">
+            <button onclick="loadAllTournaments()" class="btn btn-primary">Load All Tournaments</button>
+            <button onclick="refreshData()" class="btn btn-secondary">Refresh Data</button>
+            <button onclick="showStats()" class="btn btn-info">Show Stats</button>
+        </div>
+
+        <div class="filters">
+            <select id="sportFilter" onchange="filterBySport()">
+                <option value="">All Sports</option>
+            </select>
+            
+            <select id="levelFilter" onchange="filterByLevel()">
+                <option value="">All Levels</option>
+                <option value="international">International</option>
+                <option value="national">National</option>
+                <option value="state">State</option>
+                <option value="college">College</option>
+                <option value="school">School</option>
+                <option value="club">Club</option>
+                <option value="corporate">Corporate</option>
+            </select>
+        </div>
+
+        <div id="loading" class="loading hidden">Loading tournaments...</div>
+        <div id="error" class="error hidden"></div>
+        <div id="stats" class="stats hidden"></div>
+        
+        <div id="tournaments" class="tournaments-grid">
+            <!-- Tournaments will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        let allTournaments = [];
+        let currentTournaments = [];
+        let isLoading = false;
+
+        // Prevent multiple rapid calls
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Load tournaments when page loads
+        window.addEventListener('load', function() {
+            // Small delay to ensure CSS is loaded
+            setTimeout(() => {
+                loadAllTournaments();
+                loadSports();
+            }, 100);
+        });
+
+        async function loadAllTournaments() {
+            if (isLoading) return; // Prevent multiple calls
+            
+            isLoading = true;
+            showLoading(true);
+            hideError();
+            hideStats();
+            
+            try {
+                const response = await fetch('/api/tournaments');
+                const data = await response.json();
+                
+                if (data.success) {
+                    allTournaments = data.tournaments || [];
+                    currentTournaments = allTournaments;
+                    displayTournaments(allTournaments);
+                    showMessage(`Loaded ${data.count || 0} tournaments`, 'success');
+                } else {
+                    showError('Failed to load tournaments: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Load tournaments error:', error);
+                showError('Error loading tournaments. Please try again.');
+            } finally {
+                isLoading = false;
+                showLoading(false);
+            }
+        }
+
+        async function loadSports() {
+            try {
+                const response = await fetch('/api/sports');
+                const data = await response.json();
+                
+                if (data.success && data.sports) {
+                    const select = document.getElementById('sportFilter');
+                    if (select) {
+                        select.innerHTML = '<option value="">All Sports</option>';
+                        
+                        data.sports.forEach(sport => {
+                            const option = document.createElement('option');
+                            option.value = sport;
+                            option.textContent = sport.charAt(0).toUpperCase() + sport.slice(1);
+                            select.appendChild(option);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading sports:', error);
+            }
+        }
+
+        function displayTournaments(tournaments) {
+            const container = document.getElementById('tournaments');
+            if (!container) return;
+            
+            if (!tournaments || tournaments.length === 0) {
+                container.innerHTML = '<div class="no-data">No tournaments found. Try refreshing the data!</div>';
+                return;
+            }
+            
+            // Use DocumentFragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            tournaments.forEach(tournament => {
+                const tournamentDiv = document.createElement('div');
+                tournamentDiv.className = 'tournament-card';
+                
+                tournamentDiv.innerHTML = `
+                    <div class="tournament-image">
+                        <img src="${tournament.image_url || 'https://source.unsplash.com/400x300/?sports'}" 
+                             alt="${tournament.name || 'Tournament'}" 
+                             loading="lazy"
+                             onerror="this.src='https://source.unsplash.com/400x300/?sports'">
+                    </div>
+                    <div class="tournament-info">
+                        <h3 class="tournament-name">${tournament.name || 'Unnamed Tournament'}</h3>
+                        <div class="tournament-details">
+                            <span class="sport-tag">${tournament.sport || 'Sport'}</span>
+                            <span class="level-tag">${tournament.level || 'Level'}</span>
+                        </div>
+                        <div class="tournament-dates">
+                            <strong>📅 ${formatDate(tournament.start_date)} - ${formatDate(tournament.end_date)}</strong>
+                        </div>
+                        <div class="tournament-summary">
+                            ${tournament.summary || 'No summary available'}
+                        </div>
+                        <div class="tournament-links">
+                            ${tournament.official_url ? `<a href="${tournament.official_url}" target="_blank" class="link-btn" rel="noopener">Official Site</a>` : ''}
+                            ${tournament.streaming_links && tournament.streaming_links !== 'TBD' ? `<span class="streaming">📺 ${tournament.streaming_links}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+                
+                fragment.appendChild(tournamentDiv);
+            });
+            
+            // Replace content in one operation to prevent layout thrashing
+            container.innerHTML = '';
+            container.appendChild(fragment);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'TBD';
+            try {
+                const date = new Date(dateStr);
+                return isNaN(date.getTime()) ? dateStr : date.toLocaleDateString();
+            } catch (error) {
+                return dateStr;
+            }
+        }
+
+        // Debounced filter functions
+        const filterBySport = debounce(() => {
+            const selectedSport = document.getElementById('sportFilter')?.value || '';
+            const selectedLevel = document.getElementById('levelFilter')?.value || '';
+            applyFilters(selectedSport, selectedLevel);
+        }, 300);
+
+        const filterByLevel = debounce(() => {
+            const selectedSport = document.getElementById('sportFilter')?.value || '';
+            const selectedLevel = document.getElementById('levelFilter')?.value || '';
+            applyFilters(selectedSport, selectedLevel);
+        }, 300);
+
+        function applyFilters(sport, level) {
+            if (!allTournaments) return;
+            
+            let filtered = [...allTournaments]; // Create copy
+            
+            if (sport) {
+                filtered = filtered.filter(t => t.sport && t.sport.toLowerCase() === sport.toLowerCase());
+            }
+            
+            if (level) {
+                filtered = filtered.filter(t => t.level && t.level.toLowerCase() === level.toLowerCase());
+            }
+            
+            currentTournaments = filtered;
+            displayTournaments(filtered);
+            showMessage(`Showing ${filtered.length} tournaments`, 'info');
+        }
+
+        async function refreshData() {
+            if (isLoading) return;
+            
+            isLoading = true;
+            showLoading(true);
+            hideError();
+            hideStats();
+            
+            try {
+                showMessage('Refreshing tournament data...', 'info');
+                
+                const response = await fetch('/api/refresh');
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(data.message || 'Data refreshed successfully', 'success');
+                    // Reload tournaments
+                    await loadAllTournaments();
+                    await loadSports();
+                } else {
+                    showError('Failed to refresh data: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Refresh error:', error);
+                showError('Error refreshing data. Please try again.');
+            } finally {
+                isLoading = false;
+                showLoading(false);
+            }
+        }
+
+        async function showStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const statsDiv = document.getElementById('stats');
+                    if (statsDiv) {
+                        statsDiv.innerHTML = `
+                            <h3>📊 Tournament Statistics</h3>
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <strong>Total Tournaments:</strong> ${data.total_tournaments || 0}
+                                </div>
+                                <div class="stat-item">
+                                    <strong>Sports:</strong><br>
+                                    ${Object.entries(data.sports_count || {}).map(([sport, count]) => 
+                                        `${sport}: ${count}`
+                                    ).join('<br>') || 'No data'}
+                                </div>
+                                <div class="stat-item">
+                                    <strong>Levels:</strong><br>
+                                    ${Object.entries(data.levels_count || {}).map(([level, count]) => 
+                                        `${level}: ${count}`
+                                    ).join('<br>') || 'No data'}
+                                </div>
+                            </div>
+                        `;
+                        statsDiv.classList.remove('hidden');
+                    }
+                } else {
+                    showError('Failed to load stats: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Stats error:', error);
+                showError('Error loading statistics.');
+            }
+        }
+
+        function showLoading(show) {
+            const loading = document.getElementById('loading');
+            if (loading) {
+                if (show) {
+                    loading.classList.remove('hidden');
+                } else {
+                    loading.classList.add('hidden');
+                }
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            if (errorDiv) {
+                errorDiv.textContent = message || 'An error occurred';
+                errorDiv.classList.remove('hidden');
+                
+                // Auto-hide after 10 seconds
+                setTimeout(() => {
+                    hideError();
+                }, 10000);
+            }
+        }
+
+        function hideError() {
+            const errorDiv = document.getElementById('error');
+            if (errorDiv) {
+                errorDiv.classList.add('hidden');
+            }
+        }
+
+        function hideStats() {
+            const statsDiv = document.getElementById('stats');
+            if (statsDiv) {
+                statsDiv.classList.add('hidden');
+            }
+        }
+
+        function showMessage(message, type = 'info') {
+            // Remove existing messages
+            const existingMessages = document.querySelectorAll('.message');
+            existingMessages.forEach(msg => msg.remove());
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${type}`;
+            messageDiv.textContent = message;
+            
+            // Styling
+            Object.assign(messageDiv.style, {
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                padding: '12px 20px',
+                borderRadius: '8px',
+                zIndex: '1000',
+                maxWidth: '300px',
+                fontSize: '14px',
+                fontWeight: '500',
+                transform: 'translateZ(0)', // GPU acceleration
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            });
+            
+            if (type === 'success') {
+                messageDiv.style.backgroundColor = '#d4edda';
+                messageDiv.style.color = '#155724';
+                messageDiv.style.border = '1px solid #c3e6cb';
+            } else if (type === 'error') {
+                messageDiv.style.backgroundColor = '#f8d7da';
+                messageDiv.style.color = '#721c24';
+                messageDiv.style.border = '1px solid #f5c6cb';
+            } else {
+                messageDiv.style.backgroundColor = '#d1ecf1';
+                messageDiv.style.color = '#0c5460';
+                messageDiv.style.border = '1px solid #bee5eb';
+            }
+            
+            document.body.appendChild(messageDiv);
+            
+            // Auto remove after 4 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.style.transform = 'translateX(100%) translateZ(0)';
+                    messageDiv.style.opacity = '0';
+                    setTimeout(() => {
+                        if (messageDiv.parentNode) {
+                            messageDiv.parentNode.removeChild(messageDiv);
+                        }
+                    }, 300);
+                }
+            }, 4000);
+        }
+
+        // Handle errors globally
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error);
+        });
+
+        // Handle unhandled promise rejections
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled promise rejection:', e.reason);
+        });
+    </script>
+</body>
+</html>
